@@ -1,4 +1,4 @@
-module Lib (clex) where
+module Lib where
 
 import Data.Char (isAlpha, isDigit)
 
@@ -12,7 +12,7 @@ data Token
   | ReturnKeyword
   | IntLiteral Int
   | Identifier String
-  deriving (Show)
+  deriving (Show, Eq)
 
 clex :: String -> [Token]
 clex = clex' []
@@ -39,3 +39,40 @@ toToken buf
   | all isDigit buf = IntLiteral (read buf :: Int)
   | all isAlpha buf = Identifier buf
   | otherwise = error ("Failed to convert to token: " ++ buf)
+
+data Expr = IntConst Int
+  deriving (Show)
+
+data Statement = Return Expr
+  deriving (Show)
+
+data Function = Function {name :: String, body :: [Statement]}
+  deriving (Show)
+
+data Program = Program [Function]
+  deriving (Show)
+
+parse :: [Token] -> Program
+parse tokens = case parseFunction tokens of
+  (function, []) -> Program [function]
+  _ -> error "Tokens after function"
+
+parseFunction :: [Token] -> (Function, [Token])
+parseFunction (IntKeyword : Identifier funcName : OpenParen : CloseParen : OpenBrace : t) =
+  case parseStatement t of
+    (_, []) -> error "No tokens after Statement"
+    (statement, CloseBrace : remTok) -> (Function {name = funcName, body = [statement]}, remTok)
+    _ -> error "No CloseBrace after Statement"
+parseFunction _ = error "Invalid Function"
+
+parseStatement :: [Token] -> (Statement, [Token])
+parseStatement (ReturnKeyword : t) =
+  case parseExpr t of
+    (_, []) -> error "No tokens after Return Expr"
+    (expr, SemiColon : remTok) -> (Return expr, remTok)
+    _ -> error "Expected SemiColon after Return Expr"
+parseStatement _ = error "Invalid Statement"
+
+parseExpr :: [Token] -> (Expr, [Token])
+parseExpr (IntLiteral intVal : t) = (IntConst intVal, t)
+parseExpr _ = error "Invalid Expr"
