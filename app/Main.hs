@@ -1,12 +1,12 @@
 module Main (main) where
 
-import Lib (clex, parse)
+import Lib (clex, compile, parse)
 import System.Environment (getArgs)
 
 main :: IO ()
 main = do
-  args <- getArgs
-  cProgram <- readFile $ head args
+  [cFile, asmFile] <- getArgs
+  cProgram <- readFile cFile
   print cProgram
 
   let tokens = clex cProgram
@@ -14,3 +14,7 @@ main = do
 
   let ast = parse tokens
   print ast
+
+  let asm = compile ast
+  print asm
+  writeFile asmFile asm

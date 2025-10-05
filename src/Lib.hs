@@ -46,7 +46,7 @@ data Expr = IntConst Int
 data Statement = Return Expr
   deriving (Show)
 
-data Function = Function {name :: String, body :: [Statement]}
+data Function = Function {fname :: String, fbody :: [Statement]}
   deriving (Show)
 
 data Program = Program [Function]
@@ -61,7 +61,7 @@ parseFunction :: [Token] -> (Function, [Token])
 parseFunction (IntKeyword : Identifier funcName : OpenParen : CloseParen : OpenBrace : t) =
   case parseStatement t of
     (_, []) -> error "No tokens after Statement"
-    (statement, CloseBrace : remTok) -> (Function {name = funcName, body = [statement]}, remTok)
+    (statement, CloseBrace : remTok) -> (Function {fname = funcName, fbody = [statement]}, remTok)
     _ -> error "No CloseBrace after Statement"
 parseFunction _ = error "Invalid Function"
 
@@ -76,3 +76,20 @@ parseStatement _ = error "Invalid Statement"
 parseExpr :: [Token] -> (Expr, [Token])
 parseExpr (IntLiteral intVal : t) = (IntConst intVal, t)
 parseExpr _ = error "Invalid Expr"
+
+compile :: Program -> String
+compile (Program funcs) = foldr (\line acc -> line ++ '\n' : acc) "" compiledFuncs
+  where
+    compiledFuncs = concatMap compileFunction funcs
+
+compileFunction :: Function -> [String]
+compileFunction (Function name body) = ["\t.globl " ++ name, name ++ ":"] ++ compiledBody
+  where
+    compiledBody = concatMap (map indent . compileStatement) body
+    indent = (:) '\t'
+
+compileStatement :: Statement -> [String]
+compileStatement (Return expr) = ["movl $" ++ compileExpr expr ++ ", %eax", "ret"]
+
+compileExpr :: Expr -> String
+compileExpr (IntConst intVal) = show intVal
