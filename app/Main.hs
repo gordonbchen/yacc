@@ -7,7 +7,7 @@ main :: IO ()
 main = do
   [cFile, asmFile] <- getArgs
   cProgram <- readFile cFile
-  print cProgram
+  putStrLn cProgram
 
   let tokens = clex cProgram
   print tokens
@@ -16,5 +16,5 @@ main = do
   print ast
 
   let asm = compile ast
-  print asm
+  putStrLn asm
   writeFile asmFile asm

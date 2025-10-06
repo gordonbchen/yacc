@@ -2,12 +2,16 @@ module Lib where
 
 import Data.Char (isAlpha, isDigit)
 
+-- ---------- LEXING ----------
 data Token
   = OpenBrace
   | CloseBrace
   | OpenParen
   | CloseParen
   | SemiColon
+  | Minus
+  | Tilde
+  | Exclam
   | IntKeyword
   | ReturnKeyword
   | IntLiteral Int
@@ -20,8 +24,8 @@ clex = clex' []
 clex' :: String -> String -> [Token]
 clex' buf [] = maybeToken buf
 clex' buf (h : t)
-  | h `elem` [' ', '\n', '\t'] = maybeToken buf ++ clex' [] t
-  | h `elem` "{}();" = maybeToken buf ++ maybeToken [h] ++ clex' [] t
+  | h `elem` " \n\t" = maybeToken buf ++ clex' [] t
+  | h `elem` "{}();-~!" = maybeToken buf ++ maybeToken [h] ++ clex' [] t
   | otherwise = clex' (buf ++ [h]) t
 
 maybeToken :: String -> [Token]
@@ -33,6 +37,9 @@ toToken "}" = CloseBrace
 toToken "(" = OpenParen
 toToken ")" = CloseParen
 toToken ";" = SemiColon
+toToken "-" = Minus
+toToken "~" = Tilde
+toToken "!" = Exclam
 toToken "int" = IntKeyword
 toToken "return" = ReturnKeyword
 toToken buf
@@ -40,7 +47,11 @@ toToken buf
   | all isAlpha buf = Identifier buf
   | otherwise = error ("Failed to convert to token: " ++ buf)
 
-data Expr = IntConst Int
+-- ---------- PARSING ----------
+data UnaryOperator = NegOp | BitCompOp | LogicalNotOp
+  deriving (Show)
+
+data Expr = IntConst Int | UnaryOp UnaryOperator Expr
   deriving (Show)
 
 data Statement = Return Expr
@@ -75,8 +86,17 @@ parseStatement _ = error "Invalid Statement"
 
 parseExpr :: [Token] -> (Expr, [Token])
 parseExpr (IntLiteral intVal : t) = (IntConst intVal, t)
+parseExpr (Minus : t) = parseUnaryOp NegOp t
+parseExpr (Tilde : t) = parseUnaryOp BitCompOp t
+parseExpr (Exclam : t) = parseUnaryOp LogicalNotOp t
 parseExpr _ = error "Invalid Expr"
 
+parseUnaryOp :: UnaryOperator -> [Token] -> (Expr, [Token])
+parseUnaryOp op t = (UnaryOp op expr, remToks)
+  where
+    (expr, remToks) = parseExpr t
+
+-- ---------- COMPILING ----------
 compile :: Program -> String
 compile (Program funcs) = foldr (\line acc -> line ++ '\n' : acc) "" compiledFuncs
   where
@@ -89,7 +109,15 @@ compileFunction (Function name body) = ["\t.globl " ++ name, name ++ ":"] ++ com
     indent = (:) '\t'
 
 compileStatement :: Statement -> [String]
-compileStatement (Return expr) = ["movl $" ++ compileExpr expr ++ ", %eax", "ret"]
+compileStatement (Return expr) = compileExpr expr ++ ["ret"]
 
-compileExpr :: Expr -> String
-compileExpr (IntConst intVal) = show intVal
+compileExpr :: Expr -> [String]
+-- movl $2, %eax -> store 2 into eax, lower 32 bits of rax (return value)
+compileExpr (IntConst intVal) = ["movl $" ++ show intVal ++ ", %eax"]
+compileExpr (UnaryOp NegOp expr) = compileExpr expr ++ ["neg %eax"]
+compileExpr (UnaryOp BitCompOp expr) = compileExpr expr ++ ["not %eax"]
+-- !expr = 1 if expr == 0 else 0.
+-- cmpl $0, %eax -> compute 0 - eax, set flags
+-- movl $0 %eax -> zero out eax
+-- sete %al -> set al (lsb of eax) to 1 if ZF = 1 (0 == eax)
+compileExpr (UnaryOp LogicalNotOp expr) = compileExpr expr ++ ["cmpl $0, %eax", "movl $0, %eax", "sete %al"]
